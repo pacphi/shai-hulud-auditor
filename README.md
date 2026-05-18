@@ -25,6 +25,7 @@
 - [LINUX.md](LINUX.md) — host-level remediation on Linux (systemd, btrfs/LVM/ZFS, reimage)
 - [HARDENING.md](HARDENING.md) — preventive controls for CI build agents and dev workstations
 - [TEMPLATES.md](TEMPLATES.md) — comms templates for paused releases, IR updates, stakeholder briefings
+- [PROMPTS.md](PROMPTS.md) — copy-pasteable prompts for driving an AI assistant through the same triage
 - [scripts/triage-macos.sh](scripts/triage-macos.sh) · [scripts/triage-linux.sh](scripts/triage-linux.sh) — read-only persistence inventories
 - [scripts/remediate-repo.sh](scripts/remediate-repo.sh) — repo-level cleanup helper (refuses to run while host persistence is present)
 
