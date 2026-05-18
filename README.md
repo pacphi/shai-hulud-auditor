@@ -1,0 +1,168 @@
+# 🐛 shai-hulud-audit
+
+> 🛡️ A zero-dependency Node script that hunts for the **Mini Shai-Hulud / Shai-Hulud 2.0** npm supply-chain compromise (Apr–May 2026) — across one repo, a whole folder of repos, or any git URL.
+
+---
+
+## 🤔 Why you want this
+
+The Shai-Hulud worm slipped malicious versions into **170+ packages** across TanStack, Mistral, UiPath, OpenSearch, and friends. The payload exfiltrates tokens **and** ships a watchdog that wipes `$HOME` if it detects revocation. Not great. 😬
+
+`shai-hulud-audit` tells you, fast:
+
+- ✅ Is anything in my lockfiles a known-bad `package@version`?
+- ⚠️ Does any `package.json` even *name* an at-risk package?
+- 🕳️ Is the `@tanstack/setup` orphan-commit IOC sitting in my `node_modules`?
+- 🪤 Are the persistence hooks (`~/.claude/setup.mjs`, `gh-token-monitor.service`, …) on this machine?
+
+No installs. No dependencies. One file. Run it everywhere.
+
+---
+
+## ✨ Features
+
+- 📦 **npm + pnpm** lockfile support (`package-lock.json` v1/v2/v3, `pnpm-lock.yaml` v5/v6/v9)
+- 🌲 **Recursive** — point it at a folder of repos and get a per-project verdict
+- 🌐 **Clone-and-scan** — give it a GitHub / GitLab / Bitbucket / SSH / generic git URL and it shallow-clones to a temp dir, audits, then cleans up
+- 🧪 Detects the `@tanstack/setup` optionalDependency + `router_init.js` IOCs
+- 🖥️ Checks machine-level persistence paths
+- 🎯 Clean exit codes for CI: `0` clean, `1` findings, `2` error
+- 🪶 Zero runtime deps — just Node ≥ 16
+
+---
+
+## 🚀 Quick start
+
+```bash
+# Audit the current directory
+node audit.js
+
+# Audit one specific project
+node audit.js ~/code/my-app
+
+# Audit a whole folder of repos
+node audit.js ~/code
+
+# Audit a remote repo without cloning it yourself
+node audit.js https://github.com/your-org/your-repo.git
+```
+
+Make it executable if you like:
+
+```bash
+chmod +x audit.js
+./audit.js .
+```
+
+---
+
+## 🎛️ Modes
+
+### 1. 📁 Single project
+
+```bash
+node audit.js ./my-app
+```
+
+Looks for `package-lock.json`, `pnpm-lock.yaml`, and `package.json` in the given directory.
+
+### 2. 🌲 Recursive (a "repo of repos")
+
+```bash
+node audit.js ~/workspace
+```
+
+Walks the tree, skipping `node_modules`, `.git`, `dist`, `build`, `.next`, `.turbo`, `.cache`, hidden dirs, and symlinks. Each project gets its own line:
+
+```
+[clean]       repoB                  (npm, 842 pkgs)
+[COMPROMISED] frontend/web           (pnpm, 1503 pkgs)
+    lockfile: @tanstack/react-router@1.169.5
+[COMPROMISED] services/api           (package.json-only, 0 pkgs)
+    package-json: at-risk name "@mistralai/mistralai" declared in dependencies ("^2.2.3") — compromised versions: 2.2.3, 2.2.4
+```
+
+### 3. 🌐 Git URL (clone + scan + cleanup)
+
+```bash
+node audit.js https://github.com/your-org/your-repo.git
+node audit.js git@github.com:your-org/your-repo.git
+node audit.js https://gitlab.com/group/project.git
+node audit.js https://bitbucket.org/team/repo.git
+```
+
+Performs `git clone --depth 1` into `os.tmpdir()/shai-hulud-audit-XXXX/`, runs the full audit, and removes the temp dir on exit (including `SIGINT`/`SIGTERM`). 🧹
+
+---
+
+## 📊 What you get
+
+```
+Mini Shai-Hulud Audit
+Date:    2026-05-18T18:36:48.926Z
+IOC set: 170 package names, 344 versions
+
+Discovering projects
+  Found 12 project directories.
+
+Per-project audit
+  [clean]       .
+  [COMPROMISED] packages/router      (pnpm, 1487 pkgs)
+      lockfile: @tanstack/router-core@1.169.5
+  ...
+
+Machine-level persistence hooks
+  No known persistence hooks detected.
+
+Summary
+  Projects scanned:     12  (npm: 4, pnpm: 7, other: 1)
+  Resolved packages:    18342
+  Compromised projects: 1
+  Total findings:       1
+  Persistence hits:     0
+```
+
+---
+
+## 🤖 In CI
+
+```yaml
+- name: Shai-Hulud audit
+  run: node audit.js .
+```
+
+Pipeline fails (`exit 1`) the instant anything matches. 🟥
+
+---
+
+## 🚨 If it finds something
+
+🛑 **Do NOT immediately revoke npm tokens or delete files.**
+
+The malware ships a token-monitor watchdog that triggers a `$HOME` wipe when it detects revocation. Instead:
+
+1. 🖼️ Image / snapshot the affected machine first.
+2. 🧯 Disconnect it from the network.
+3. 🧼 Rotate credentials from a **clean** environment afterward.
+
+---
+
+## 🧠 How it works (60-second tour)
+
+The script is one file, organised top-to-bottom in six sections:
+
+1. **IOC data** — the compromised `package@version` list + persistence paths
+2. **Audit primitives** — pure `isCompromised(name, version)` checks
+3. **Lockfile parsers** — npm JSON + pnpm YAML (regex, no deps) → flat `{name, version}` lists
+4. **Project auditor** — runs every check against one directory, returns a structured result
+5. **Discovery** — recursive walker + git-URL clone helper
+6. **Reporting / main** — CLI, per-project lines, summary
+
+Want to extend the IOC list? Edit the `COMPROMISED` map at the top. That's it. ✂️
+
+---
+
+## 📜 License
+
+Use it, fork it, ship it. Stay safe out there. 🌵
+
