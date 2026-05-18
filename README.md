@@ -225,6 +225,13 @@ Want to extend the IOC list? Edit the `COMPROMISED` map at the top. That's it. �
 
 ---
 
+## 🙏 Credits
+
+- **[Peter Hollis](https://github.com/peter-hollis-orkastrate)** — originated the version of the audit script this repo is built on, including the IOC inventory and persistence-path checks. The Orkastrate pre-release audit checklist that informed [HARDENING.md](HARDENING.md) and [TEMPLATES.md](TEMPLATES.md) also came from his work.
+- The security researchers and vendors whose IOC writeups are cited throughout [MACOS.md](MACOS.md), [LINUX.md](LINUX.md), and [HARDENING.md](HARDENING.md) — StepSecurity, Snyk, Wiz, Expel, Arctic Wolf, Phoenix Security, Picus, Elastic, VentureBeat, Carthage Electronics, Intrudify, Datadog, Orca, Guardz, Socprime, Corgea, Microsoft Security, Unit 42, Socket.
+
+---
+
 ## 📜 License
 
 Use it, fork it, ship it. Stay safe out there. 🌵
