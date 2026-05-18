@@ -11,6 +11,7 @@
 - **🪪 SLSA provenance signatures pass on these packages.** The attacker used a stolen OIDC token to publish through the legitimate TanStack pipeline, so `npm audit signatures` and provenance attestation checks **report green on compromised versions**. You must check the version list, not the signature. ([Wiz][wiz-readme], [VentureBeat][vb-readme])
 - **🪤 The watchdog wipes `$HOME` on token revocation.** Image / snapshot the host before touching credentials. Order is: **disarm persistence → re-audit → rotate** — see [MACOS.md](MACOS.md) / [LINUX.md](LINUX.md).
 - **📅 If you ran `npm install` / `npm ci` between 29 April and 13 May 2026**, re-audit. That's the Mini Shai-Hulud publish window — anything resolved inside it should be re-checked, including CI build agents. ([Snyk][snyk-readme], [Carthage][carth-readme])
+- **🤖 Driving an AI coding assistant?** [PROMPTS.md](PROMPTS.md) has 12 copy-pasteable prompts that walk an assistant through every check below — per-repo audit, host triage, lockfile-history forensics, workflow secret / OIDC inspection, CI hardening PRs — with the watchdog warning baked in so it can't accidentally trigger the wiper.
 
 [wiz-readme]: https://www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised
 [vb-readme]: https://venturebeat.com/security/shai-hulud-worm-172-npm-pypi-packages-valid-provenance-ci-cd-audit
@@ -162,6 +163,29 @@ Pipeline fails (`exit 1`) the instant anything matches. 🟥
 
 ---
 
+## 🤖 With an AI assistant
+
+If you're already working with Claude Code / Cursor / Aider / Copilot Workspace, [PROMPTS.md](PROMPTS.md) ships 12 self-contained prompts you can paste verbatim:
+
+| # | Prompt | When to use |
+|---|---|---|
+| 1 | Audit a single repo | Starting cold on any repo |
+| 2 | Triage the host for persistence | Starting cold on any machine |
+| 3 | Pin past IOCs + refresh lockfile | Auditor flagged a `package-json` finding |
+| 4 | Audit workflows for OIDC / secrets | Need to know if CI could have leaked tokens |
+| 5 | Check GitHub run history in window | Reconstructing what ran between 29 Apr–13 May |
+| 6 | Lockfile-history forensics | Prove the worm never resolved in this repo |
+| 7 | Repo secret / variable inventory | Decide what to rotate |
+| 8 | Pre-commit safety check | About to push remediation commits |
+| 9 | Build a CI hardening PR | Applying HARDENING.md §1 in one PR |
+| 10 | Stakeholder comms drafting | Slack post / leadership note / IR status |
+| 11 | Post-incident retrospective | After the all-clear |
+| 12 | Re-audit on a schedule | LaunchAgent or systemd timer for weekly checks |
+
+Every prompt that touches credentials or persistence repeats the **watchdog warning** verbatim and asks the assistant to **show a diff before any destructive action** — so even a misconfigured agent can't accidentally `rm -rf` or revoke tokens.
+
+---
+
 ## 🚨 If it finds something
 
 🛑 **Do NOT immediately revoke npm tokens or delete files.**
@@ -175,6 +199,7 @@ Step-by-step playbooks:
 - 🔧 **Repo-level cleanup (cross-platform):** `bash scripts/remediate-repo.sh /path/to/repo`
 - 🛡️ **Preventing the next wave:** [HARDENING.md](HARDENING.md)
 - 📣 **Briefing stakeholders / pausing a release:** [TEMPLATES.md](TEMPLATES.md)
+- 🤖 **Have an AI assistant drive it for you:** [PROMPTS.md](PROMPTS.md) — start with **#1 Audit a single repo** and **#2 Triage the host for persistence**, then follow the sequence the prompts spell out.
 
 Quick summary:
 
