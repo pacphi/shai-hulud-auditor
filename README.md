@@ -1,6 +1,32 @@
-# 🐛 shai-hulud-audit
+# 🐛 shai-hulud-auditor
 
 > 🛡️ A zero-dependency Node script that hunts for the **Mini Shai-Hulud / Shai-Hulud 2.0** npm supply-chain compromise (Apr–May 2026) — across one repo, a whole folder of repos, or any git URL.
+>
+> **Tracking:** [CVE-2026-45321](https://borecraft.com/news/tanstack-mini-shai-hulud-cve-2026-45321-guide.html) · Snyk **GHSA-g7cv-rxg3-hmpx** · Mini Shai-Hulud waves of **29 April – 13 May 2026**.
+
+---
+
+## ⚠️ Read this first
+
+- **🪪 SLSA provenance signatures pass on these packages.** The attacker used a stolen OIDC token to publish through the legitimate TanStack pipeline, so `npm audit signatures` and provenance attestation checks **report green on compromised versions**. You must check the version list, not the signature. ([Wiz][wiz-readme], [VentureBeat][vb-readme])
+- **🪤 The watchdog wipes `$HOME` on token revocation.** Image / snapshot the host before touching credentials. Order is: **disarm persistence → re-audit → rotate** — see [MACOS.md](MACOS.md) / [LINUX.md](LINUX.md).
+- **📅 If you ran `npm install` / `npm ci` between 29 April and 13 May 2026**, re-audit. That's the Mini Shai-Hulud publish window — anything resolved inside it should be re-checked, including CI build agents. ([Snyk][snyk-readme], [Carthage][carth-readme])
+
+[wiz-readme]: https://www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised
+[vb-readme]: https://venturebeat.com/security/shai-hulud-worm-172-npm-pypi-packages-valid-provenance-ci-cd-audit
+[snyk-readme]: https://snyk.io/blog/tanstack-npm-packages-compromised/
+[carth-readme]: https://carthageelectronics.com/npm-supply-chain-crisis-mini-shai-hulud-may-2026/
+
+---
+
+## 📚 Related docs
+
+- [MACOS.md](MACOS.md) — host-level remediation on macOS (LaunchAgent, APFS snapshots, reinstall)
+- [LINUX.md](LINUX.md) — host-level remediation on Linux (systemd, btrfs/LVM/ZFS, reimage)
+- [HARDENING.md](HARDENING.md) — preventive controls for CI build agents and dev workstations
+- [TEMPLATES.md](TEMPLATES.md) — comms templates for paused releases, IR updates, stakeholder briefings
+- [scripts/triage-macos.sh](scripts/triage-macos.sh) · [scripts/triage-linux.sh](scripts/triage-linux.sh) — read-only persistence inventories
+- [scripts/remediate-repo.sh](scripts/remediate-repo.sh) — repo-level cleanup helper (refuses to run while host persistence is present)
 
 ---
 
@@ -139,11 +165,22 @@ Pipeline fails (`exit 1`) the instant anything matches. 🟥
 
 🛑 **Do NOT immediately revoke npm tokens or delete files.**
 
-The malware ships a token-monitor watchdog that triggers a `$HOME` wipe when it detects revocation. Instead:
+The malware ships a token-monitor watchdog that triggers a `$HOME` wipe when it detects revocation. Order of operations matters: **disarm persistence → re-audit → rotate credentials → reinstall.**
+
+Step-by-step playbooks:
+
+- 🍎 **macOS:** [MACOS.md](MACOS.md) + `bash scripts/triage-macos.sh`
+- 🐧 **Linux:** [LINUX.md](LINUX.md) + `bash scripts/triage-linux.sh`
+- 🔧 **Repo-level cleanup (cross-platform):** `bash scripts/remediate-repo.sh /path/to/repo`
+- 🛡️ **Preventing the next wave:** [HARDENING.md](HARDENING.md)
+- 📣 **Briefing stakeholders / pausing a release:** [TEMPLATES.md](TEMPLATES.md)
+
+Quick summary:
 
 1. 🖼️ Image / snapshot the affected machine first.
 2. 🧯 Disconnect it from the network.
-3. 🧼 Rotate credentials from a **clean** environment afterward.
+3. 🪤 Quarantine the persistence artefacts BEFORE touching any tokens.
+4. 🧼 Rotate credentials from a **clean** environment afterward.
 
 ---
 

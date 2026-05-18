@@ -273,6 +273,78 @@ function isAtRiskName (name) {
   return Object.prototype.hasOwnProperty.call(COMPROMISED, name);
 }
 
+// Minimal, dependency-free semver "does this range allow this version" check.
+// Handles the forms that show up in real package.json files:
+//   exact, =, ==, ^, ~, >, >=, <, <=, *, x, X, "||" disjunction, space conjunction.
+// On anything unrecognised (workspace:/file:/git:/hyphen ranges/etc.) it returns
+// true — i.e. fail-safe to "warn the human" rather than silently ignore.
+function parseSemver (v) {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(v));
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+function cmpSemver (a, b) {
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i];
+  return 0;
+}
+
+function rangeAllowsVersion (range, version) {
+  if (!range || typeof range !== 'string') return true;
+  const v = parseSemver(version);
+  if (!v) return true;
+
+  const orParts = range.split('||').map(s => s.trim()).filter(Boolean);
+  if (orParts.length !== 1) return orParts.some(p => rangeAllowsVersion(p, version));
+
+  if (range.includes(' - ')) return true;  // hyphen range — bail safe
+
+  const andParts = range.trim().split(/\s+/).filter(Boolean);
+  return andParts.every(atom => atomAllowsVersion(atom, v));
+}
+
+function atomAllowsVersion (atom, v) {
+  if (/^(workspace|file|git|github|http|https|npm|link|portal|catalog):/i.test(atom)) return true;
+  if (atom === '*' || atom === '' || atom.toLowerCase() === 'x') return true;
+
+  const m = /^([\^~]|>=|<=|>|<|==|=)?\s*v?(.+)$/.exec(atom);
+  if (!m) return true;
+  const op  = m[1] || '';
+  const tgt = parseSemver(m[2]);
+  if (!tgt) return true;
+
+  const c = cmpSemver(v, tgt);
+  switch (op) {
+    case '':
+    case '=':
+    case '==': return c === 0;
+    case '>':  return c > 0;
+    case '>=': return c >= 0;
+    case '<':  return c < 0;
+    case '<=': return c <= 0;
+    case '^':
+      if (c < 0) return false;
+      if (tgt[0] > 0) return v[0] === tgt[0];
+      if (tgt[1] > 0) return v[0] === 0 && v[1] === tgt[1];
+      return v[0] === 0 && v[1] === 0 && v[2] === tgt[2];
+    case '~': {
+      if (c < 0) return false;
+      const parts = m[2].split('.');
+      if (parts.length >= 2) return v[0] === tgt[0] && v[1] === tgt[1];
+      return v[0] === tgt[0];
+    }
+    default: return true;
+  }
+}
+
+// Returns true iff the declared range can resolve to one of the compromised
+// versions for `name`. Used to suppress at-risk-name false positives where
+// the user has already pinned past the bad versions.
+function rangeIntersectsCompromised (name, range) {
+  const versions = COMPROMISED[name];
+  if (!versions) return false;
+  return versions.some(cv => rangeAllowsVersion(range, cv));
+}
+
 // ==========================================================================
 // 3. LOCKFILE PARSERS
 // Each parser returns a flat array of { name, version, location? } records
@@ -468,12 +540,22 @@ function auditDeclaredRanges (dir, result) {
     const deps = pkg[bucket] || {};
     for (const [name, range] of Object.entries(deps)) {
       if (isAtRiskName(name)) {
-        result.findings.push({
-          kind: 'package-json',
-          name,
-          message: 'at-risk name "' + name + '" declared in ' + bucket + ' ("' + range +
-                   '") — compromised versions: ' + COMPROMISED[name].join(', '),
-        });
+        const bad = COMPROMISED[name].join(', ');
+        if (rangeIntersectsCompromised(name, range)) {
+          result.findings.push({
+            kind: 'package-json',
+            name,
+            message: 'at-risk name "' + name + '" declared in ' + bucket + ' ("' + range +
+                     '") — range can resolve to compromised versions: ' + bad,
+          });
+        } else {
+          result.findings.push({
+            kind: 'package-json-info',
+            name,
+            message: 'at-risk name "' + name + '" declared in ' + bucket + ' ("' + range +
+                     '") — range excludes compromised versions (' + bad + '); pinned past IOCs',
+          });
+        }
       }
     }
   }
@@ -637,12 +719,16 @@ function header (s) {
   console.log(BLUE + '-'.repeat(s.length) + RESET);
 }
 
+function isRealFinding (f) { return f.kind !== 'package-json-info'; }
+
 function reportProject (audit, root) {
   const rel = path.relative(root, audit.dir) || '.';
   const mgr = audit.managers.length ? audit.managers.join('+') : 'package.json-only';
-  const tag = audit.findings.length
+  const realFindings = audit.findings.filter(isRealFinding);
+  const infoFindings = audit.findings.filter(f => !isRealFinding(f));
+  const tag = realFindings.length
     ? RED + BOLD + 'COMPROMISED' + RESET
-    : GREEN + 'clean' + RESET;
+    : (infoFindings.length ? BLUE + 'clean (info)' + RESET : GREEN + 'clean' + RESET);
 
   console.log('  [' + tag + '] ' + BOLD + rel + RESET +
               '  (' + mgr + ', ' + audit.packagesScanned + ' pkgs)');
@@ -651,7 +737,10 @@ function reportProject (audit, root) {
     console.log('      ' + YELLOW + 'warn: ' + w + RESET);
   }
   for (const f of audit.findings) {
-    const colour = (f.kind === 'package-json') ? YELLOW : RED;
+    let colour;
+    if (f.kind === 'package-json')      colour = YELLOW;
+    else if (f.kind === 'package-json-info') colour = BLUE;
+    else                                 colour = RED;
     console.log('      ' + colour + f.kind + ': ' + f.message + RESET);
   }
 }
@@ -738,8 +827,10 @@ function main () {
   const persistenceHits = reportPersistence();
 
   header('Summary');
-  const dirty       = audits.filter(a => a.findings.length > 0);
-  const totalFinds  = audits.reduce((n, a) => n + a.findings.length, 0);
+  const dirty       = audits.filter(a => a.findings.some(isRealFinding));
+  const infoOnly    = audits.filter(a => a.findings.length > 0 && !a.findings.some(isRealFinding));
+  const totalFinds  = audits.reduce((n, a) => n + a.findings.filter(isRealFinding).length, 0);
+  const totalInfos  = audits.reduce((n, a) => n + a.findings.filter(f => !isRealFinding(f)).length, 0);
   const totalPkgs   = audits.reduce((n, a) => n + a.packagesScanned, 0);
   const byManager   = countByManager(audits);
 
@@ -748,7 +839,17 @@ function main () {
               ', other: ' + byManager.other + ')');
   console.log('  Resolved packages:    ' + totalPkgs);
   console.log('  Compromised projects: ' + dirty.length);
+  if (dirty.length > 0) {
+    for (const a of dirty) {
+      const rel = path.relative(root, a.dir) || '.';
+      console.log('    - ' + rel);
+    }
+  }
   console.log('  Total findings:       ' + totalFinds);
+  console.log('  Informational notes:  ' + totalInfos +
+              (infoOnly.length ? '  (' + infoOnly.length + ' project' +
+                                 (infoOnly.length === 1 ? '' : 's') +
+                                 ' pinned past IOCs)' : ''));
   console.log('  Persistence hits:     ' + persistenceHits);
 
   if (dirty.length === 0 && persistenceHits === 0) {
